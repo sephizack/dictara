@@ -9,6 +9,8 @@ Thank you for your interest in contributing to Dictara! This document provides g
 - **Node.js** (LTS version 20.19+ or 22.12+)
 - **Rust** (stable) - [Install via rustup](https://rustup.rs)
 - **npm**
+- **CMake** (3.x) - Required to build the local transcription engines
+- **Xcode with Swift 6.2+ and Metal Toolchain** - Required for Qwen on Apple Silicon
 
 #### Installing Rust (Required)
 
@@ -61,6 +63,77 @@ pkill -x dictara
 4. The app will open automatically. You may need to:
    - Grant **Accessibility permissions** in System Settings → Privacy & Security → Accessibility
    - Configure an **OpenAI or Azure API key** in the app's preferences
+
+### Local Release Build
+
+Quit the official app before launching your local build, then run:
+
+```bash
+npm run release:local
+```
+
+This builds and opens `target/release/bundle/macos/Dictara.app`. You can use the
+app without a development server or VS Code running. The local app uses the
+`app.dictara.dev` identifier, with separate settings and macOS permissions.
+
+Official updates and signed updater artifacts are disabled in this checkout.
+After changing the code, run `npm run verify` and rebuild your local app.
+
+### Qwen3 Local Transcription
+
+On Apple Silicon with macOS 14+, the build automatically compiles and bundles a
+native MLX Swift engine. No Python installation or separate server is required.
+Initialize Xcode and install its Metal compiler before the first build:
+
+```bash
+xcodebuild -runFirstLaunch
+xcodebuild -downloadComponent MetalToolchain
+```
+
+In Preferences, select Local (Offline), download Qwen3-ASR 1.7B (MLX 8-bit), then
+enable it. The download is approximately 2.47 GB and every file is verified with
+SHA-256 against a pinned model revision. The memory estimate in the UI is
+approximate and depends on audio length. Whisper and Parakeet remain available.
+
+Transcription loads only local model files, with automatic language detection,
+including French. The engine stays loaded between recordings and is stopped
+when the model is unloaded. Qwen is not offered on Intel Macs.
+
+Run the focused backend tests with `cargo test -p dictara models:: --lib`.
+To test real offline inference and process recovery, supply a downloaded model
+directory and a 16kHz mono WAV saying "Bonjour, ceci est un test de transcription locale":
+
+```bash
+DICTARA_QWEN_MODEL_DIR="/path/to/qwen3-asr-1.7b-8bit" \
+DICTARA_QWEN_TEST_AUDIO="/path/to/test.wav" \
+cargo test -p dictara transcribes_offline_and_restarts_after_engine_exit --lib -- --ignored
+```
+
+### Optional French-to-English Dictation
+
+In Preferences > JIT Translation, download Qwen3 4B (MLX 4-bit), enable
+Translate to English, and assign its English dictation shortcut. Hold the
+shortcut to record and release to transcribe, translate, and paste English.
+The normal recording shortcuts remain unchanged.
+
+Translation is disabled by default. Downloading its weights does not load them.
+When enabled, its separate native process stays loaded alongside the speech
+model, including after restarting Dictara. Disabling translation stops that
+process; deleting its weights also disables it. Inference is entirely local.
+
+The preferences show the total estimated RAM for loaded/loading models and a
+per-model breakdown. These are approximate model estimates, not measured
+application memory; temporary buffers and application overhead are excluded.
+Translation failures do not paste the original French text, and Retry keeps
+the English output mode.
+
+The translation model download is approximately 2.28 GB and is pinned and
+SHA-256 verified. To exercise real inference and verify process shutdown:
+
+```bash
+DICTARA_TRANSLATION_MODELS_DIR="/path/to/models" \
+cargo test -p dictara translates_offline_and_unloads_when_disabled --lib -- --ignored
+```
 
 ## Development Workflow
 

@@ -23,15 +23,17 @@ pub struct ModelLoader {
     current_model: Arc<Mutex<Option<LoadedModel>>>,
     loading: Arc<Mutex<Option<String>>>,
     models_dir: PathBuf,
+    resources_dir: PathBuf,
 }
 
 impl ModelLoader {
     /// Create a new ModelLoader.
-    pub fn new(models_dir: PathBuf) -> Self {
+    pub fn new(models_dir: PathBuf, resources_dir: PathBuf) -> Self {
         Self {
             current_model: Arc::new(Mutex::new(None)),
             loading: Arc::new(Mutex::new(None)),
             models_dir,
+            resources_dir,
         }
     }
 
@@ -147,8 +149,11 @@ impl ModelLoader {
         // Load model in blocking task (model loading is CPU-intensive)
         let model_name_clone = model_name.to_string();
         let model_type = entry.model_type;
-        let result =
-            tokio::task::spawn_blocking(move || LocalClient::new(&model_path, model_type)).await;
+        let resources_dir = self.resources_dir.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            LocalClient::new(&model_path, model_type, &resources_dir)
+        })
+        .await;
 
         // Clear loading state
         {
@@ -393,7 +398,7 @@ impl ModelLoader {
         // Load model (blocking)
         let model_type = entry.model_type;
         debug!("Starting model initialization ({:?})...", model_type);
-        let result = LocalClient::new(&model_path, model_type);
+        let result = LocalClient::new(&model_path, model_type, &self.resources_dir);
 
         // Clear loading state
         {

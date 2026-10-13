@@ -33,6 +33,7 @@ function RecordingPopup() {
           break
 
         case 'transcribing':
+        case 'translating':
         case 'stopped':
         case 'cancelled':
           timerFns.cleanupTimer()
@@ -80,6 +81,7 @@ function RecordingPopup() {
 
       {/* Transcribing State */}
       {state === 'transcribing' && <TranscribingState />}
+      {state === 'translating' && <TranscribingState label="Translating..." />}
 
       {/* Recording State */}
       {state === 'recording' && (

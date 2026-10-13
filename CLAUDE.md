@@ -12,6 +12,10 @@ Also, you can clone source code for other libraries if you need into `~/ai-conte
 
 IMPORTANT: After you make changes you must run `npm run verify` to check if there are any errors, and fix all errors and warnings.
 
+# Preview cleanup
+
+IMPORTANT: Close browser preview pages you opened as soon as they are no longer needed, and stop any temporary preview servers you started. Complete this cleanup before ending the task unless the user explicitly asks to keep a preview running. Do not close pages or stop processes opened by the user.
+
 # Frontend
 
 ## UI

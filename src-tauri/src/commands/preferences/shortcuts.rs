@@ -19,8 +19,7 @@ pub fn save_shortcuts_config(
     config: ShortcutsConfig,
 ) -> Result<(), String> {
     // Validate all shortcuts
-    config.push_to_record.validate()?;
-    config.hands_free.validate()?;
+    config.validate()?;
 
     // Load old config for Fn key change detection
     let old_config = config_store.get(&ConfigKey::SHORTCUTS).unwrap_or_default();

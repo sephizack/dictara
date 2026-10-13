@@ -7,6 +7,7 @@ import {
   useLoadModel,
   useUnloadModel,
 } from '@/hooks/useLocalModels'
+import { useSaveTranslationConfig } from '@/hooks/useTranslation'
 import { ProviderSection } from './ProviderSection'
 import type { Provider } from './types'
 import { ModelSelector } from './ModelSelector'
@@ -33,6 +34,7 @@ export function LocalProvider({
   const saveConfig = useSaveLocalModelConfig()
   const loadModel = useLoadModel()
   const unloadModel = useUnloadModel()
+  const saveTranslation = useSaveTranslationConfig()
 
   const isLoading = modelsLoading || configLoading
 
@@ -46,6 +48,7 @@ export function LocalProvider({
     if (isActive && provider === 'local') {
       // Disabling local provider - unload the model to free memory
       unloadModel.mutate()
+      saveTranslation.mutate(false)
     }
     onToggleActive(provider)
   }
@@ -53,6 +56,7 @@ export function LocalProvider({
   // Handle disabling from the model card's Disable button
   const handleDisableProvider = () => {
     if (isActive) {
+      saveTranslation.mutate(false)
       onToggleActive('local')
     }
   }
@@ -109,10 +113,6 @@ export function LocalProvider({
       onToggleActive={handleToggleActive}
     >
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Transcribe locally using Whisper models. No API key required, works completely offline.
-        </p>
-
         {/* Error message display */}
         {loadError && (
           <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -125,7 +125,7 @@ export function LocalProvider({
         )}
 
         <ModelSelector
-          models={models ?? []}
+          models={models?.filter((model) => !model.isTranslation) ?? []}
           selectedModel={selectedModel ?? null}
           onSelectModel={handleSelectModel}
           onDisableProvider={handleDisableProvider}

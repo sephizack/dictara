@@ -41,6 +41,8 @@ macro_rules! with_commands {
             $crate::commands::load_local_model_config,
             $crate::commands::save_local_model_config,
             $crate::commands::delete_local_model_config,
+            $crate::commands::load_translation_config,
+            $crate::commands::save_translation_config,
             // Recording
             $crate::commands::stop_recording,
             $crate::commands::cancel_recording,

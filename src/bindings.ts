@@ -252,6 +252,17 @@ async deleteLocalModelConfig() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async loadTranslationConfig() : Promise<TranslationConfig> {
+    return await TAURI_INVOKE("load_translation_config");
+},
+async saveTranslationConfig(enabled: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_translation_config", { enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async stopRecording() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("stop_recording") };
@@ -473,15 +484,15 @@ recordingStateChanged: "recording-state-changed"
 /**
  * App configuration (stored locally)
  */
-export type AppConfig = { 
+export type AppConfig = {
 /**
  * Currently active provider (only one can be active)
  */
-activeProvider: Provider | null; 
+activeProvider: Provider | null;
 /**
  * Key used to trigger recording (default: Fn)
  */
-recordingTrigger?: RecordingTrigger; 
+recordingTrigger?: RecordingTrigger;
 /**
  * Whether autostart has been set up on first launch
  * This prevents re-enabling autostart after user manually disables it
@@ -494,11 +505,11 @@ export type AzureOpenAIConfigStatus = { configured: boolean; endpoint: string }
 /**
  * Key capture event - streamed to frontend during shortcut configuration
  */
-export type KeyCaptureEvent = 
+export type KeyCaptureEvent =
 /**
  * Key was pressed
  */
-{ type: "keyDown"; keycode: number; label: string } | 
+{ type: "keyDown"; keycode: number; label: string } |
 /**
  * Key was released
  */
@@ -506,7 +517,7 @@ export type KeyCaptureEvent =
 /**
  * Local model provider configuration (stored in local store, not keychain)
  */
-export type LocalModelConfig = { 
+export type LocalModelConfig = {
 /**
  * Name of the selected model (e.g., "whisper-small")
  */
@@ -514,19 +525,19 @@ selectedModel: string | null }
 /**
  * Model download state change event - single event stream for all download state transitions
  */
-export type ModelDownloadStateChanged = 
+export type ModelDownloadStateChanged =
 /**
  * Download is in progress
  */
-{ state: "progress"; modelName: string; downloadedBytes: number; totalBytes: number; percentage: number } | 
+{ state: "progress"; modelName: string; downloadedBytes: number; totalBytes: number; percentage: number } |
 /**
  * Download complete, verifying checksum
  */
-{ state: "verifying"; modelName: string } | 
+{ state: "verifying"; modelName: string } |
 /**
  * Download completed successfully
  */
-{ state: "complete"; modelName: string } | 
+{ state: "complete"; modelName: string } |
 /**
  * Download failed with an error
  */
@@ -534,19 +545,19 @@ export type ModelDownloadStateChanged =
 /**
  * Combined view sent to frontend (catalog + status merged).
  */
-export type ModelInfo = { name: string; displayName: string; description: string; sizeBytes: number; estimatedRamMb: number; isDownloaded: boolean; isDownloading: boolean; isLoaded: boolean; isLoading: boolean; downloadedBytes: number }
+export type ModelInfo = { name: string; displayName: string; description: string; sizeBytes: number; estimatedRamMb: number; isTranslation: boolean; isDownloaded: boolean; isDownloading: boolean; isLoaded: boolean; isLoading: boolean; downloadedBytes: number }
 /**
  * Model loading state change event - single event stream for all loading state transitions
  */
-export type ModelLoadingStateChanged = 
+export type ModelLoadingStateChanged =
 /**
  * Model loading has started
  */
-{ state: "started"; modelName: string } | 
+{ state: "started"; modelName: string } |
 /**
  * Model loaded successfully
  */
-{ state: "complete"; modelName: string } | 
+{ state: "complete"; modelName: string } |
 /**
  * Model loading failed with an error
  */
@@ -554,15 +565,15 @@ export type ModelLoadingStateChanged =
 /**
  * Onboarding configuration (stored locally)
  */
-export type OnboardingConfig = { 
+export type OnboardingConfig = {
 /**
  * Whether the user has completed or skipped onboarding
  */
-finished: boolean; 
+finished: boolean;
 /**
  * Current step in the onboarding flow
  */
-currentStep: OnboardingStep; 
+currentStep: OnboardingStep;
 /**
  * Flag to track if we're resuming after an accessibility restart
  */
@@ -582,23 +593,23 @@ export type Provider = "open_ai" | "azure_open_ai" | "local"
 /**
  * Recording state change event - single event stream for all state transitions
  */
-export type RecordingStateChanged = 
+export type RecordingStateChanged =
 /**
  * Recording has started
  */
-{ state: "started" } | 
+{ state: "started" } |
 /**
  * Recording is being transcribed
  */
-{ state: "transcribing" } | 
+{ state: "transcribing" } | { state: "translating" } |
 /**
  * Recording completed successfully
  */
-{ state: "stopped"; text: string } | 
+{ state: "stopped"; text: string } |
 /**
  * Recording was cancelled by user
  */
-{ state: "cancelled" } | 
+{ state: "cancelled" } |
 /**
  * An error occurred during recording or transcription
  */
@@ -618,15 +629,16 @@ export type ShortcutKey = { keycode: number; label: string }
 /**
  * Complete shortcuts configuration
  */
-export type ShortcutsConfig = { 
+export type ShortcutsConfig = {
 /**
  * Push-to-talk: Hold to record, release to stop
  */
-pushToRecord: Shortcut; 
+pushToRecord: Shortcut;
 /**
  * Hands-free: Press to toggle (start/stop)
  */
-handsFree: Shortcut }
+handsFree: Shortcut; translate?: Shortcut | null }
+export type TranslationConfig = { enabled?: boolean }
 
 /** tauri-specta globals **/
 

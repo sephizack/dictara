@@ -2,7 +2,7 @@ import { commands } from '@/bindings'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { error as logError } from '@tauri-apps/plugin-log'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { ExternalLink, Sparkles, Keyboard, Settings } from 'lucide-react'
+import { ExternalLink, Sparkles, Keyboard, Settings, Languages } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Separator } from '../ui/separator'
 import {
@@ -27,6 +27,11 @@ const menuItems = [
     title: 'Providers & Models',
     url: '/preferences/api-keys',
     icon: Sparkles,
+  },
+  {
+    title: 'JIT Translation',
+    url: '/preferences/jit-translation',
+    icon: Languages,
   },
   {
     title: 'Shortcuts',
@@ -61,7 +66,7 @@ export function PreferencesLayout({ children }: PreferencesLayoutProps) {
   }, [])
 
   const handleOpenGitHub = () => {
-    openUrl('https://github.com/vitalii-zinchenko/dictara')
+    openUrl('https://github.com/sephizack/dictara')
   }
 
   return (
@@ -104,7 +109,7 @@ export function PreferencesLayout({ children }: PreferencesLayoutProps) {
             onClick={handleOpenGitHub}
             className="flex items-center gap-1 hover:text-foreground transition-colors"
           >
-            <span>Source Code: github.com/vitalii-zinchenko/dictara</span>
+            <span>View on Github</span>
             <ExternalLink className="h-3 w-3" />
           </button>
           <span>•</span>

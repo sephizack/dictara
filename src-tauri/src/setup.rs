@@ -8,7 +8,7 @@ use crate::{
     globe_key,
     keyboard_listener::KeyListener,
     keychain::{self, ProviderAccount},
-    models::{ModelLoader, ModelManager},
+    models::{ModelLoader, ModelManager, TranslationService},
     recording::{
         cleanup_old_recordings, Controller, LastRecording, LastRecordingState, RecordingCommand,
         RecordingStateManager,
@@ -105,7 +105,30 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
         ModelManager::new(app.app_handle())
             .map_err(|e| format!("Failed to create ModelManager: {}", e))?,
     );
-    let model_loader = Arc::new(ModelLoader::new(model_manager.models_dir().clone()));
+    let model_loader = Arc::new(ModelLoader::new(
+        model_manager.models_dir().clone(),
+        app.path().resource_dir()?,
+    ));
+    let translation = Arc::new(TranslationService::new(
+        model_manager.models_dir().clone(),
+        app.path().resource_dir()?,
+    ));
+    app.manage(translation.clone());
+    if app_config.active_provider == Some(Provider::Local)
+        && config_store
+            .get(&ConfigKey::TRANSLATION)
+            .unwrap_or_default()
+            .enabled
+    {
+        let service = translation.clone();
+        let store = config_store.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Err(error) = service.set_enabled(true, &store) {
+                error!("Failed to load translation model on startup: {}", error);
+                let _ = service.set_enabled(false, &store);
+            }
+        });
+    }
 
     // Migrate old models to new unified directory structure in background
     // This runs asynchronously to not block app startup
@@ -231,8 +254,12 @@ pub fn setup_app(app: &mut tauri::App<tauri::Wry>) -> Result<(), Box<dyn std::er
     let has_accessibility = true;
 
     if has_accessibility {
-        let listener =
-            KeyListener::start(command_tx, state_manager.clone(), shortcuts_config.clone());
+        let listener = KeyListener::start(
+            command_tx,
+            state_manager.clone(),
+            shortcuts_config.clone(),
+            translation,
+        );
 
         // Manage KeyListener in Tauri state for hot-swapping
         app.manage(listener);

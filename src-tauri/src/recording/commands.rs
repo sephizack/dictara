@@ -6,6 +6,7 @@ use super::RecordingEvent;
 pub enum RecordingCommand {
     /// Start a new recording session
     StartRecording,
+    StartTranslatedRecording,
     /// Stop the current recording and begin transcription
     StopRecording,
     /// Lock the recording (Fn release will be ignored, press Fn again to stop)
@@ -19,7 +20,9 @@ pub enum RecordingCommand {
 impl From<RecordingCommand> for RecordingEvent {
     fn from(command: RecordingCommand) -> Self {
         match command {
-            RecordingCommand::StartRecording => RecordingEvent::Start,
+            RecordingCommand::StartRecording | RecordingCommand::StartTranslatedRecording => {
+                RecordingEvent::Start
+            }
             RecordingCommand::StopRecording => RecordingEvent::Stop,
             RecordingCommand::LockRecording => RecordingEvent::Lock,
             RecordingCommand::Cancel => RecordingEvent::Cancel,

@@ -5,6 +5,8 @@ use tauri_specta::Event;
 use tokio::sync::mpsc::Receiver;
 
 use crate::clients::{Transcriber, TranscriptionError};
+use crate::config::{Config, ConfigKey, ConfigStore, Provider};
+use crate::models::TranslationService;
 use crate::recording::{
     audio_recorder::{cleanup_recording_file, AudioRecorder},
     commands::RecordingCommand,
@@ -14,6 +16,7 @@ use crate::recording::{
 use crate::ui::menu::Menu;
 use crate::ui::window::{close_recording_popup, open_recording_popup};
 use crate::updater;
+use tauri::Manager;
 
 /// Bytes per second for 16kHz mono 16-bit audio (~32KB/s)
 const AUDIO_BYTES_PER_SECOND: u64 = 32000;
@@ -104,6 +107,7 @@ pub struct Controller {
     audio_level_channel: Arc<Mutex<Option<Channel<f32>>>>,
     last_recording_state: LastRecordingState,
     menu: Menu,
+    translate_recording: bool,
 }
 
 impl Controller {
@@ -128,6 +132,7 @@ impl Controller {
             audio_level_channel,
             last_recording_state,
             menu,
+            translate_recording: false,
         }
     }
 
@@ -137,10 +142,21 @@ impl Controller {
         let mut current_recording: Option<Recording> = None;
 
         while let Some(command) = self.command_rx.blocking_recv() {
+            let translated = matches!(command, RecordingCommand::StartTranslatedRecording);
+            if translated
+                && current_recording.is_some()
+                && !self.state_manager.is_recording_locked()
+            {
+                self.translate_recording = true;
+                continue;
+            }
             // Attempt state transition
             match self.state_manager.transition(command.into()) {
                 Ok(TransitionResult::Changed { action, .. }) => {
                     if let Some(action) = action {
+                        if matches!(action, RecordingAction::StartRecording) {
+                            self.translate_recording = translated;
+                        }
                         if let Err(error) = self.execute_action(action, &mut current_recording) {
                             self.handle_action_error(error);
                         }
@@ -377,14 +393,48 @@ impl Controller {
         audio_file_path: &str,
         duration_ms: u64,
     ) -> Result<(), ActionError> {
+        let translation_error = |error: String| ActionError {
+            error_type: "translation".into(),
+            user_message: format!("Translation failed: {error}"),
+            error_message: error,
+            audio_file_path: Some(audio_file_path.to_string()),
+        };
+        if self.translate_recording {
+            let config = self.app_handle.state::<Config>();
+            if config
+                .get(&ConfigKey::APP)
+                .unwrap_or_default()
+                .active_provider
+                != Some(Provider::Local)
+                || !self
+                    .app_handle
+                    .state::<Arc<TranslationService>>()
+                    .is_enabled()
+            {
+                return Err(translation_error("Local translation is disabled".into()));
+            }
+        }
         // Create transcriber from app handle - handles all providers uniformly
-        let transcriber = Transcriber::from_app(&self.app_handle)
-            .map_err(|e| ActionError::transcription(&e, audio_file_path.to_string()))?;
+        let transcriber = if self.translate_recording {
+            Transcriber::from_local_app(&self.app_handle)
+        } else {
+            Transcriber::from_app(&self.app_handle)
+        }
+        .map_err(|e| ActionError::transcription(&e, audio_file_path.to_string()))?;
 
         // Transcribe - the transcriber handles API vs local internally
-        let text = transcriber
+        let mut text = transcriber
             .transcribe(PathBuf::from(audio_file_path), duration_ms)
             .map_err(|e| ActionError::transcription(&e, audio_file_path.to_string()))?;
+
+        if self.translate_recording && !text.trim().is_empty() {
+            let _ = RecordingStateChanged::Translating.emit(&self.app_handle);
+            text = self
+                .app_handle
+                .state::<Arc<TranslationService>>()
+                .translate(&text)
+                .map_err(translation_error)?;
+        }
 
         self.handle_transcription_success(&text, audio_file_path)
     }

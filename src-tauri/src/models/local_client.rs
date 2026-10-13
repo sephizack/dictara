@@ -7,11 +7,13 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 use crate::clients::TranscriptionError;
 
 use super::catalog::ModelType;
+use super::qwen::QwenClient;
 
 /// Unified transcription engine supporting multiple backends
 enum TranscriptionEngine {
     Whisper(WhisperContext),
     Parakeet(Box<ParakeetTDT>),
+    Qwen(Box<QwenClient>),
 }
 
 /// Local transcription client for offline transcription.
@@ -32,7 +34,11 @@ impl LocalClient {
     /// # Returns
     /// * `Ok(LocalClient)` - Model loaded successfully
     /// * `Err(TranscriptionError)` - Failed to load model
-    pub fn new(model_path: &Path, model_type: ModelType) -> Result<Self, TranscriptionError> {
+    pub fn new(
+        model_path: &Path,
+        model_type: ModelType,
+        resources_dir: &Path,
+    ) -> Result<Self, TranscriptionError> {
         info!("Loading {:?} model from: {:?}", model_type, model_path);
 
         if !model_path.exists() {
@@ -53,6 +59,15 @@ impl LocalClient {
                 let parakeet = ParakeetTDT::from_pretrained(model_path, None)
                     .map_err(|e| TranscriptionError::ModelLoadFailed(e.to_string()))?;
                 TranscriptionEngine::Parakeet(Box::new(parakeet))
+            }
+            ModelType::Qwen => TranscriptionEngine::Qwen(Box::new(
+                QwenClient::new(model_path, resources_dir)
+                    .map_err(TranscriptionError::ModelLoadFailed)?,
+            )),
+            ModelType::QwenTranslation => {
+                return Err(TranscriptionError::ModelLoadFailed(
+                    "A translation model cannot be used for speech recognition".into(),
+                ))
             }
         };
 
@@ -111,6 +126,9 @@ impl LocalClient {
                     .map_err(|e| TranscriptionError::LocalTranscriptionFailed(e.to_string()))?;
                 result.text
             }
+            TranscriptionEngine::Qwen(qwen) => qwen
+                .transcribe_file(audio_path)
+                .map_err(TranscriptionError::LocalTranscriptionFailed)?,
         };
 
         info!("Transcription complete: {} characters", text.len());

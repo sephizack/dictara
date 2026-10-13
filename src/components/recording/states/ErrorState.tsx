@@ -25,7 +25,11 @@ export function ErrorState({
       <div className="flex-1 min-w-0 overflow-hidden">
         {error.errorType !== 'no_speech' && (
           <div className="text-red-400 text-xs font-semibold">
-            {error.errorType === 'recording' ? 'Recording Failed' : 'Transcription Failed'}
+            {error.errorType === 'recording'
+              ? 'Recording Failed'
+              : error.errorType === 'translation'
+                ? 'Translation Failed'
+                : 'Transcription Failed'}
           </div>
         )}
         <div

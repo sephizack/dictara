@@ -20,7 +20,7 @@
     "be:build:apple:silicon": "cd src-tauri && cargo build --target aarch64-apple-darwin",
     "be:build:apple:intel": "cd src-tauri && cargo build --target x86_64-apple-darwin",
     "verify": "npm run fe:check && npm run fe:format && npm run be:format && npm run be:lint && npm run be:check && npm run be:check-release && npm run be:build:apple:silicon && npm run be:build:apple:intel",
-    "release:local": "./scripts/with-env.sh sh -c 'tauri build && open src-tauri/target/release/bundle/macos/Dictara.app'",
+    "release:local": "./scripts/with-env.sh sh -c 'tauri build --bundles app && open target/release/bundle/macos/Dictara.app'",
     "get-config": "./scripts/dump-config.sh app.dictara",
     "get-config:dev": "./scripts/dump-config.sh app.dictara.dev",
     "prepare": "husky"

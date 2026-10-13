@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub enum ModelType {
     Whisper,
     Parakeet,
+    Qwen,
+    QwenTranslation,
 }
 
 /// Individual file within a multi-file model
@@ -52,7 +54,7 @@ pub fn is_model_in_catalog(name: &str) -> bool {
 /// Whisper SHA-256 hashes from: https://huggingface.co/ggerganov/whisper.cpp
 /// Parakeet models from NVIDIA via Hugging Face
 pub fn get_model_catalog() -> Vec<ModelCatalogEntry> {
-    vec![
+    let mut catalog = vec![
         // Parakeet models - multi-file downloads (25 languages, faster CPU inference)
         ModelCatalogEntry {
             name: "parakeet-tdt-0.6b-v3-int8".into(),
@@ -179,5 +181,50 @@ pub fn get_model_catalog() -> Vec<ModelCatalogEntry> {
                     .into(),
             }],
         },
-    ]
+    ];
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        catalog.insert(
+            0,
+            serde_json::from_str(include_str!("../../qwen/model.json"))
+                .expect("Invalid bundled Qwen model manifest"),
+        );
+    }
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        catalog.push(
+            serde_json::from_str(include_str!("../../qwen/translation-model.json"))
+                .expect("Invalid Qwen translation model manifest"),
+        );
+    }
+    catalog
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn qwen_manifest_is_complete_and_pinned() {
+        let entry: ModelCatalogEntry =
+            serde_json::from_str(include_str!("../../qwen/model.json")).unwrap();
+        assert_eq!(entry.model_type, ModelType::Qwen);
+        assert!(entry
+            .files
+            .iter()
+            .any(|file| file.filename == "model.safetensors"));
+        assert!(entry.files.iter().all(|file| {
+            file.sha256.len() == 64
+                && file.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+                && file
+                    .url
+                    .contains("/a8379a2e2f9e313c9292cdf1af4055ab56d50d55/")
+        }));
+    }
+
+    #[test]
+    fn qwen_is_only_available_on_apple_silicon() {
+        assert_eq!(
+            is_model_in_catalog("qwen3-asr-1.7b-8bit"),
+            cfg!(all(target_os = "macos", target_arch = "aarch64"))
+        );
+    }
 }

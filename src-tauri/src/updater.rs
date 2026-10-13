@@ -243,6 +243,20 @@ fn perform_install(_app_handle: &tauri::AppHandle, pending: PendingInstall) {
 /// Start periodic update checking and idle-based installation
 /// Should be called from setup after the app is initialized
 pub fn start_periodic_update_check(app_handle: tauri::AppHandle, updater_state: Arc<Updater>) {
+    let updates_enabled = app_handle
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|config| config.get("endpoints"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|endpoints| !endpoints.is_empty());
+
+    if !updates_enabled {
+        info!("Automatic updates disabled");
+        return;
+    }
+
     #[cfg(debug_assertions)]
     info!("🔧 DEBUG MODE: Updater running in simulation mode - updates will be downloaded but not installed");
 

@@ -4,11 +4,16 @@ import { useSaveAppConfig } from '@/hooks/useSaveAppConfig'
 import { useEffect, useRef, useState } from 'react'
 import { ProviderList } from './ProviderList'
 import type { Provider } from './types'
+import { Cpu } from 'lucide-react'
+import { useAvailableModels } from '@/hooks/useLocalModels'
 
 export function ApiKeys() {
   // Load app config using TanStack Query (type-safe via tauri-specta)
   const { data: config, isLoading } = useAppConfig()
   const saveConfig = useSaveAppConfig()
+  const { data: models } = useAvailableModels()
+  const residentModels = models?.filter((model) => model.isLoaded || model.isLoading) ?? []
+  const estimatedRamMb = residentModels.reduce((total, model) => total + model.estimatedRamMb, 0)
 
   // Local state - initialized from config on first load
   const [activeProvider, setActiveProvider] = useState<Provider>(null)
@@ -56,6 +61,30 @@ export function ApiKeys() {
 
   return (
     <div className="space-y-4">
+      <div className="border-b pb-3 space-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span
+            className="flex items-center gap-2"
+            title="Estimated model memory only; excludes application overhead and varies with recording length."
+          >
+            <Cpu className="h-4 w-4" />
+            Total model RAM (estimated)
+          </span>
+          <span className="font-medium tabular-nums">~{estimatedRamMb.toLocaleString()} MB</span>
+        </div>
+        {residentModels.map((model) => (
+          <div
+            key={model.name}
+            className="flex flex-wrap justify-between gap-x-3 text-xs text-muted-foreground"
+          >
+            <span>
+              {model.displayName}
+              {model.isLoading ? ' (loading)' : ''}
+            </span>
+            <span className="tabular-nums">~{model.estimatedRamMb.toLocaleString()} MB</span>
+          </div>
+        ))}
+      </div>
       <p className="text-sm text-muted-foreground">
         Select a transcription provider. Only one provider can be enabled at a time.
       </p>

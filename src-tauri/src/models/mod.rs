@@ -3,12 +3,15 @@ pub mod events;
 mod loader;
 mod local_client;
 mod manager;
+mod qwen;
 mod status;
+mod translation;
 
 pub use catalog::{is_model_in_catalog, ModelCatalogEntry};
 pub use loader::ModelLoader;
 pub use manager::ModelManager;
 pub use status::ModelStatus;
+pub use translation::{TranslationService, TRANSLATION_MODEL};
 
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +25,7 @@ pub struct ModelInfo {
     pub description: String,
     pub size_bytes: u64,
     pub estimated_ram_mb: u64,
+    pub is_translation: bool,
 
     // From status
     pub is_downloaded: bool,
@@ -39,6 +43,7 @@ impl ModelInfo {
             description: catalog.description.clone(),
             size_bytes: catalog.size_bytes,
             estimated_ram_mb: catalog.estimated_ram_mb,
+            is_translation: catalog.model_type == catalog::ModelType::QwenTranslation,
             is_downloaded: status.is_downloaded,
             is_downloading: status.is_downloading,
             is_loaded: status.is_loaded,

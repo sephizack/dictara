@@ -86,6 +86,8 @@ pub struct ShortcutsConfig {
     pub push_to_record: Shortcut,
     /// Hands-free: Press to toggle (start/stop)
     pub hands_free: Shortcut,
+    #[serde(default)]
+    pub translate: Option<Shortcut>,
 }
 
 impl Default for ShortcutsConfig {
@@ -112,7 +114,31 @@ impl Default for ShortcutsConfig {
                     },
                 ],
             },
+            translate: None,
         }
+    }
+}
+
+impl ShortcutsConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        self.push_to_record.validate()?;
+        self.hands_free.validate()?;
+        if let Some(translate) = &self.translate {
+            translate.validate()?;
+            let contains = |first: &Shortcut, second: &Shortcut| {
+                second
+                    .keys
+                    .iter()
+                    .all(|key| first.keys.iter().any(|other| other.keycode == key.keycode))
+            };
+            if contains(&self.push_to_record, translate)
+                || contains(translate, &self.hands_free)
+                || contains(&self.hands_free, translate)
+            {
+                return Err("The translation shortcut conflicts with an existing shortcut".into());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -219,6 +245,17 @@ pub struct LocalModelConfig {
 impl ConfigKey<LocalModelConfig> {
     #[allow(dead_code)]
     pub const LOCAL_MODEL: Self = Self::new("localModelConfig");
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationConfig {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl ConfigKey<TranslationConfig> {
+    pub const TRANSLATION: Self = Self::new("translationConfig");
 }
 
 // ===== Telemetry Configuration =====
@@ -358,6 +395,7 @@ pub fn migrate_trigger_to_shortcuts(store: &impl ConfigStore) -> Result<(), Stri
                 },
             ],
         },
+        translate: None,
     };
 
     store.set(&ConfigKey::<ShortcutsConfig>::SHORTCUTS, shortcuts)?;
@@ -368,6 +406,24 @@ pub fn migrate_trigger_to_shortcuts(store: &impl ConfigStore) -> Result<(), Stri
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn old_shortcut_settings_keep_translation_disabled() {
+        let mut value = serde_json::to_value(ShortcutsConfig::default()).unwrap();
+        value.as_object_mut().unwrap().remove("translate");
+        let config: ShortcutsConfig = serde_json::from_value(value).unwrap();
+        assert!(config.translate.is_none());
+        assert!(!TranslationConfig::default().enabled);
+    }
+
+    #[test]
+    fn translation_shortcut_conflicts_are_rejected() {
+        let mut config = ShortcutsConfig::default();
+        config.translate = Some(config.push_to_record.clone());
+        assert!(config.validate().is_err());
+        config.translate = Some(config.hands_free.clone());
+        assert!(config.validate().is_err());
+    }
     use std::collections::HashMap;
 
     // Simple in-memory mock store for testing

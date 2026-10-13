@@ -33,7 +33,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "resources": ["resources/**/*"],
     "icon": [
       "icons/32x32.png",
@@ -50,10 +50,7 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
-      "endpoints": [
-        "https://github.com/vitalii-zinchenko/dictara/releases/latest/download/latest.json"
-      ],
+      "endpoints": [],
       "dialog": false,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhFREJEMDgwOTMwNjdGNEYKUldSUGZ3YVRnTkRianZrL1UyaWJyanR5MzJValJFUklZT0NLQUpjYmFKemtMRkQzRE01Nmd6Ky8K"
     }

@@ -1,5 +1,7 @@
 use crate::config::{self, AppConfig, ConfigKey, ConfigStore, Provider, RecordingTrigger};
+use crate::models::TranslationService;
 use log::error;
+use std::sync::Arc;
 use tauri::State;
 
 // ===== GENERAL APP CONFIGURATION COMMANDS =====
@@ -18,6 +20,7 @@ pub fn save_app_config(
     config_store: State<config::Config>,
     active_provider: Option<String>,
     recording_trigger: Option<RecordingTrigger>,
+    translation: State<Arc<TranslationService>>,
 ) -> Result<(), String> {
     // Load existing config to preserve fields that aren't being updated
     let mut config = config_store.get(&ConfigKey::APP).unwrap_or_default();
@@ -40,5 +43,8 @@ pub fn save_app_config(
         config.recording_trigger = trigger;
     }
 
+    if config.active_provider != Some(Provider::Local) {
+        translation.set_enabled(false, config_store.inner())?;
+    }
     config_store.set(&ConfigKey::APP, config)
 }

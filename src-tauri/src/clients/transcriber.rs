@@ -55,6 +55,12 @@ impl Transcriber {
         Ok(Self { service })
     }
 
+    pub fn from_local_app(app: &AppHandle) -> Result<Self, TranscriptionError> {
+        Ok(Self {
+            service: Self::create_local_service(app)?,
+        })
+    }
+
     /// Test API credentials without creating a persistent instance.
     ///
     /// Creates a temporary client and attempts to transcribe the embedded silent audio.

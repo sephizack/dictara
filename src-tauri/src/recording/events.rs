@@ -15,6 +15,7 @@ pub enum RecordingStateChanged {
     /// Recording is being transcribed
     #[serde(rename = "transcribing")]
     Transcribing,
+    Translating,
     /// Recording completed successfully
     #[serde(rename = "stopped")]
     Stopped {

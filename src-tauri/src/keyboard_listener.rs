@@ -1,4 +1,5 @@
 use crate::config::ShortcutsConfig;
+use crate::models::TranslationService;
 use crate::recording::{RecordingCommand, RecordingStateManager};
 use crate::shortcuts::events::KeyCaptureEvent;
 use dictara_keyboard::{grab, Event, EventType};
@@ -18,6 +19,12 @@ enum ListenerMode {
     Capture { app_handle: AppHandle },
 }
 
+#[derive(Default)]
+struct TranslationHold {
+    active: bool,
+    stopped: bool,
+}
+
 /// Keyboard listener that detects key events and emits recording commands
 pub struct KeyListener {
     _thread_handle: Option<JoinHandle<()>>,
@@ -29,6 +36,7 @@ impl KeyListener {
         command_tx: mpsc::Sender<RecordingCommand>,
         state_manager: Arc<RecordingStateManager>,
         initial_config: ShortcutsConfig,
+        translation: Arc<TranslationService>,
     ) -> Self {
         info!(
             "Starting KeyListener with initial config: push_to_record={:?}, hands_free={:?}",
@@ -42,10 +50,14 @@ impl KeyListener {
                 shortcuts: initial_config,
             };
             let mut pressed_keys: HashSet<u32> = HashSet::new();
+            let mut translated_hold = TranslationHold::default();
 
             if let Err(err) = grab(move |event| {
                 // Phase 1: Sync to latest mode from control channel
                 Self::sync_mode(&mut mode, &mut mode_rx, &mut pressed_keys);
+                if pressed_keys.is_empty() {
+                    translated_hold = TranslationHold::default();
+                }
 
                 // Phase 2: Process event with fresh mode
                 match &mode {
@@ -55,6 +67,8 @@ impl KeyListener {
                         &mut pressed_keys,
                         &command_tx,
                         &state_manager,
+                        translation.is_enabled(),
+                        &mut translated_hold,
                     ),
                     ListenerMode::Capture { app_handle } => {
                         Self::handle_capture_mode(event, app_handle)
@@ -105,6 +119,8 @@ impl KeyListener {
         pressed_keys: &mut HashSet<u32>,
         command_tx: &mpsc::Sender<RecordingCommand>,
         state_manager: &Arc<RecordingStateManager>,
+        translation_enabled: bool,
+        translated_hold: &mut TranslationHold,
     ) -> Option<Event> {
         match event.event_type {
             EventType::KeyPress(key) => {
@@ -113,8 +129,29 @@ impl KeyListener {
                 // Check if shortcut was matched BEFORE inserting new key (rising edge detection)
                 let was_push_to_record = shortcuts.push_to_record.matches(pressed_keys);
                 let was_hands_free = shortcuts.hands_free.matches(pressed_keys);
+                let translate = shortcuts.translate.as_ref().filter(|_| translation_enabled);
+                let was_translate =
+                    translate.is_some_and(|shortcut| shortcut.matches(pressed_keys));
 
                 pressed_keys.insert(keycode);
+
+                if !was_translate
+                    && translate.is_some_and(|shortcut| shortcut.matches(pressed_keys))
+                {
+                    if state_manager.is_recording_locked() {
+                        let _ = command_tx.blocking_send(RecordingCommand::StopRecording);
+                    } else {
+                        translated_hold.active = true;
+                        translated_hold.stopped = false;
+                        let _ =
+                            command_tx.blocking_send(RecordingCommand::StartTranslatedRecording);
+                    }
+                    return None;
+                }
+
+                if translated_hold.active {
+                    return None;
+                }
 
                 // Push-to-talk: Rising edge detected
                 if !was_push_to_record && shortcuts.push_to_record.matches(pressed_keys) {
@@ -145,7 +182,7 @@ impl KeyListener {
                 }
 
                 // Swallow all keys while push-to-record is active
-                if shortcuts.push_to_record.matches(pressed_keys) {
+                if translated_hold.active || shortcuts.push_to_record.matches(pressed_keys) {
                     return None;
                 }
 
@@ -156,8 +193,26 @@ impl KeyListener {
 
                 // Check push-to-record BEFORE removing key
                 let was_push_to_record = shortcuts.push_to_record.matches(pressed_keys);
+                let released_translation_key = shortcuts
+                    .translate
+                    .as_ref()
+                    .is_some_and(|shortcut| shortcut.keys.iter().any(|key| key.keycode == keycode));
 
                 pressed_keys.remove(&keycode);
+
+                if translated_hold.active {
+                    if released_translation_key
+                        && !translated_hold.stopped
+                        && !state_manager.is_recording_locked()
+                    {
+                        translated_hold.stopped = true;
+                        let _ = command_tx.blocking_send(RecordingCommand::StopRecording);
+                    }
+                    if pressed_keys.is_empty() {
+                        *translated_hold = TranslationHold::default();
+                    }
+                    return None;
+                }
 
                 // Release stops recording (unless locked)
                 if was_push_to_record && !state_manager.is_recording_locked() {
@@ -229,5 +284,104 @@ impl KeyListener {
             .iter()
             .any(|k| k.keycode == fn_code)
             || config.hands_free.keys.iter().any(|k| k.keycode == fn_code)
+            || config
+                .translate
+                .as_ref()
+                .is_some_and(|shortcut| shortcut.keys.iter().any(|key| key.keycode == fn_code))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Shortcut, ShortcutKey};
+    use dictara_keyboard::Key;
+
+    #[test]
+    fn translated_chord_promotes_normal_recording_and_stops_once() {
+        let mut config = ShortcutsConfig::default();
+        config.translate = Some(Shortcut {
+            keys: [Key::Function, Key::ControlLeft]
+                .into_iter()
+                .map(|key| ShortcutKey {
+                    keycode: key.to_macos_keycode(),
+                    label: key.to_label(),
+                })
+                .collect(),
+        });
+        config.validate().unwrap();
+        let (sender, mut receiver) = mpsc::channel(10);
+        let manager = Arc::new(RecordingStateManager::new());
+        let mut pressed = HashSet::new();
+        let mut hold = TranslationHold::default();
+        for event in [
+            EventType::KeyPress(Key::Function),
+            EventType::KeyPress(Key::ControlLeft),
+            EventType::KeyPress(Key::Space),
+            EventType::KeyRelease(Key::ControlLeft),
+            EventType::KeyRelease(Key::Space),
+            EventType::KeyPress(Key::Space),
+            EventType::KeyRelease(Key::Function),
+            EventType::KeyRelease(Key::Space),
+        ] {
+            assert!(KeyListener::handle_normal_mode(
+                Event::new(event),
+                &config,
+                &mut pressed,
+                &sender,
+                &manager,
+                true,
+                &mut hold
+            )
+            .is_none());
+        }
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            RecordingCommand::StartRecording
+        ));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            RecordingCommand::StartTranslatedRecording
+        ));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            RecordingCommand::StopRecording
+        ));
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn disabled_translation_shortcut_never_requests_translation() {
+        let mut config = ShortcutsConfig::default();
+        config.translate = Some(Shortcut {
+            keys: [Key::Function, Key::ControlLeft]
+                .into_iter()
+                .map(|key| ShortcutKey {
+                    keycode: key.to_macos_keycode(),
+                    label: key.to_label(),
+                })
+                .collect(),
+        });
+        let (sender, mut receiver) = mpsc::channel(10);
+        let manager = Arc::new(RecordingStateManager::new());
+        let mut pressed = HashSet::new();
+        let mut hold = TranslationHold::default();
+        for key in [Key::Function, Key::ControlLeft] {
+            KeyListener::handle_normal_mode(
+                Event::new(EventType::KeyPress(key)),
+                &config,
+                &mut pressed,
+                &sender,
+                &manager,
+                false,
+                &mut hold,
+            );
+        }
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            RecordingCommand::StartRecording
+        ));
+        assert!(receiver.try_recv().is_err());
+        assert!(!hold.active);
     }
 }

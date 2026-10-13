@@ -38,6 +38,7 @@ export function useAvailableModels() {
 
   return useQuery({
     queryKey: MODELS_QUERY_KEY,
+    refetchInterval: 3000,
     queryFn: async (): Promise<ModelInfo[]> => {
       return await commands.getAvailableModels()
     },

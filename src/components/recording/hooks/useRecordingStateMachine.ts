@@ -9,7 +9,7 @@ import {
 } from '@/hooks/useRecording'
 import { events, type RecordingStateChanged } from '@/bindings'
 
-export type RecordingState = 'recording' | 'transcribing' | 'error'
+export type RecordingState = 'recording' | 'transcribing' | 'translating' | 'error'
 
 // Extract error type from the discriminated union
 export type RecordingErrorPayload = Extract<RecordingStateChanged, { state: 'error' }>
@@ -103,6 +103,10 @@ export function useRecordingStateMachine(
 
           case 'transcribing':
             setState('transcribing')
+            break
+
+          case 'translating':
+            setState('translating')
             break
 
           case 'stopped':
